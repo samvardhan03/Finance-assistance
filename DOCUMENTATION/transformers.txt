@@ -1,40 +1,67 @@
-TransformerModel Class:
-Initialization (__init__):
+Importing necessary libraries:
 
-Parameters:
-input_dim: Dimensionality of the input data.
-output_dim: Dimensionality of the output data (financial advice in this case).
-hidden_dim: Dimensionality of the hidden layers.
-num_layers: Number of transformer layers.
-num_heads: Number of attention heads.
-dropout: Dropout rate for regularization.
-It initializes the transformer model by defining its components:
-embedding: Linear layer for embedding the input data.
-pos_encoding: Positional encoding module for incorporating positional information into the input embeddings.
-encoder: Transformer encoder module consisting of multiple encoder layers.
-decoder: Linear layer for generating the final output.
-Forward Pass (forward):
+pandas for data manipulation and preprocessing
+torch and torch.nn for building and training the PyTorch model
+torch.utils.data for creating the dataset and data loader
+transformers for loading the BERT tokenizer and model
 
-Parameters:
-x: Input data.
-Steps:
-Embeds the input data using the embedding layer.
-Adds positional encoding to the embedded data using the pos_encoding module.
-Passes the encoded data through the transformer encoder.
-Applies the decoder layer to generate the final output.
-PositionalEncoding Class:
-Initialization (__init__):
+Defining the dataset class:
 
-Parameters:
-d_model: Dimensionality of the model.
-dropout: Dropout rate for regularization.
-max_len: Maximum length of sequences for positional encoding.
-It initializes the positional encoding module by creating a positional encoding matrix (pe) based on the maximum sequence length (max_len) and the model dimensionality (d_model).
-The positional encoding matrix is calculated using sine and cosine functions based on the position and dimension indices.
-Forward Pass (forward):
+MyDataset inherits from Dataset and is used to represent the preprocessed data.
+The __init__ method initializes the dataset with the preprocessed data.
+The __len__ method returns the length of the dataset.
+The __getitem__ method returns the data at the specified index, converted to a PyTorch tensor.
 
-Parameters:
-x: Input data.
-Steps:
-Adds the positional encoding matrix (pe) to the input data.
-Applies dropout regularization to the combined data.
+Defining data preprocessing steps:
+
+The preprocess_data function takes raw data as input and performs the following steps:
+Fills missing values with zeros
+Converts categorical variables to numerical representations using label encoding
+Normalizes numerical features by subtracting the mean and dividing by the standard deviation
+Combines the processed numerical and categorical features into a single DataFrame
+The preprocessed data is returned.
+
+Loading and preprocessing the data:
+
+The CSV files containing stock data, customer data, and transaction data are loaded using pd.read_csv.
+The preprocess_data function is applied to each dataset to preprocess the data.
+The preprocessed datasets are stored in variables preprocessed_stock_data, preprocessed_customer_data, and preprocessed_transaction_data.
+
+Loading the BERT tokenizer and model:
+
+The BERT tokenizer and model are loaded from the pre-trained 'bert-base-uncased' model using BertTokenizer.from_pretrained and BertModel.from_pretrained.
+Example text data is tokenized and encoded using the BERT tokenizer.
+BERT embeddings are generated for the encoded text data using the BERT model.
+
+Creating dataset and data loader instances:
+
+MyDataset instances are created for each preprocessed dataset.
+DataLoader instances are created for each dataset with a batch size of 32 and shuffling enabled.
+
+Defining the financial advice model:
+
+The FinancialAdviceModel class is defined, which inherits from nn.Module.
+The model consists of two fully connected layers with ReLU activation in between.
+The input size of the first layer is set to the number of features in the preprocessed stock data, and the output size is set to 1.
+The model is instantiated with the specified input size, hidden size, and output size.
+
+Configuring the training setup:
+
+An Adam optimizer is created with a learning rate of 0.001 to optimize the model parameters.
+Mean Squared Error (MSE) loss is chosen as the criterion for calculating the loss during training.
+
+Training the model:
+
+The training loop runs for 10 epochs (iterations over the entire dataset).
+
+For each batch in the stock data loader:
+The optimizer's gradients are set to zero.
+The batch data is checked for any NaN values, and the batch is skipped if any are found.
+The batch data is passed through the model to obtain the outputs.
+The loss is calculated between the model outputs and the target values (last column of the batch data).
+The loss is backpropagated to compute the gradients.
+The optimizer updates the model parameters based on the computed gradients.
+The loss value for each epoch is printed.
+
+Saving the trained model:
+The trained model's state dictionary is saved to a file named 'financial_advice_model.pth' using torch.save.
