@@ -1,1 +1,40 @@
+TransformerModel Class:
+Initialization (__init__):
 
+Parameters:
+input_dim: Dimensionality of the input data.
+output_dim: Dimensionality of the output data (financial advice in this case).
+hidden_dim: Dimensionality of the hidden layers.
+num_layers: Number of transformer layers.
+num_heads: Number of attention heads.
+dropout: Dropout rate for regularization.
+It initializes the transformer model by defining its components:
+embedding: Linear layer for embedding the input data.
+pos_encoding: Positional encoding module for incorporating positional information into the input embeddings.
+encoder: Transformer encoder module consisting of multiple encoder layers.
+decoder: Linear layer for generating the final output.
+Forward Pass (forward):
+
+Parameters:
+x: Input data.
+Steps:
+Embeds the input data using the embedding layer.
+Adds positional encoding to the embedded data using the pos_encoding module.
+Passes the encoded data through the transformer encoder.
+Applies the decoder layer to generate the final output.
+PositionalEncoding Class:
+Initialization (__init__):
+
+Parameters:
+d_model: Dimensionality of the model.
+dropout: Dropout rate for regularization.
+max_len: Maximum length of sequences for positional encoding.
+It initializes the positional encoding module by creating a positional encoding matrix (pe) based on the maximum sequence length (max_len) and the model dimensionality (d_model).
+The positional encoding matrix is calculated using sine and cosine functions based on the position and dimension indices.
+Forward Pass (forward):
+
+Parameters:
+x: Input data.
+Steps:
+Adds the positional encoding matrix (pe) to the input data.
+Applies dropout regularization to the combined data.
