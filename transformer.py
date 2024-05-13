@@ -1,107 +1,76 @@
-import pandas as pd
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-from transformers import BertTokenizer, BertModel
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+import pandas as pd
 
-# Define your dataset class
-class MyDataset(Dataset):
-    def __init__(self, data):
-        self.data = data
+transactions = pd.read_csv('transactions.csv')
+customers = pd.read_csv('customer_dataset.csv')
+stock_data = pd.read_csv('stock_exchange_data.csv')
 
-    def __len__(self):
-        return len(self.data)
+# Merge datasets based on CustomerID
+merged_data = pd.merge(transactions, customers, on='CustomerID', how='inner')
 
-    def __getitem__(self, idx):
-        return torch.tensor(self.data.iloc[idx].values)
+# Feature engineering
+scaler = StandardScaler()
+numerical_columns = ['balance', 'balance_frequency', 'purchases', 'ONEOFF_PURCHASES', 'installment_purchases', 'CASH_ADVANCE', 'PURCHASES_FREQUENCY', 'ONEOFF_PURCHASES_FREQUENCY', 'PURCHASES_INSTALLMENTS_FREQUENCY', 'CASH_ADVANCE_FREQUENCY', 'CASH_ADVANCE_TRX', 'PURCHASES_TRX', 'CREDIT_LIMIT', 'PAYMENTS', 'MINIMUM_PAYMENTS', 'PRC_FULL_PAYMENT', 'tenure']
+merged_data[numerical_columns] = scaler.fit_transform(merged_data[numerical_columns])
 
-# Define data preprocessing steps
-def preprocess_data(data):
-    # Fill missing values with zeros
-    data_filled = data.fillna(0)
+# Merge with stock data based on a common identifier (symbol)
+merged_data = pd.merge(merged_data, stock_data, on='symbol', how='inner')
 
-    # Convert categorical variables to numerical representations using label encoding
-    categorical_cols = data_filled.select_dtypes(include=['object']).columns
-    for col in categorical_cols:
-        data_filled[col] = data_filled[col].astype('category').cat.codes
+# Define feature columns and target columns
+feature_columns = numerical_columns + ['open', 'high', 'low', 'LTP', 'chng', '%chnge', 'volume (lacs)', 'turnover (crs)', '52 w H', '52 wL', '365 d % chng', '30 d % chng']
+target_columns = ['target_column1', 'target_column2']
 
-    # Normalize numerical features
-    numeric_cols = data_filled.select_dtypes(include=['int', 'float']).columns
-    data_normalized = (data_filled[numeric_cols] - data_filled[numeric_cols].mean()) / data_filled[numeric_cols].std()
+X_train, X_val, y_train, y_val = train_test_split(merged_data[feature_columns], merged_data[target_columns], test_size=0.2, random_state=42)
 
-    # Combine processed numerical and categorical features
-    processed_data = pd.concat([data_normalized, data_filled[categorical_cols]], axis=1)
+# Convert data to PyTorch tensors
+X_train_tensor = torch.Tensor(X_train.values)
+y_train_tensor = torch.Tensor(y_train.values)
+X_val_tensor = torch.Tensor(X_val.values)
+y_val_tensor = torch.Tensor(y_val.values)
 
-    return processed_data
-
-# Load the data from CSV files
-stock_data = pd.read_csv("/content/drive/My Drive/National_Stock_Exchange_of_India_Ltd.csv")
-customer_data = pd.read_csv("/content/drive/My Drive/Customer DataSet.csv")
-transaction_data = pd.read_csv("/content/drive/My Drive/bank_transactions.csv")
-
-# Preprocess the loaded data
-preprocessed_stock_data = preprocess_data(stock_data)
-preprocessed_customer_data = preprocess_data(customer_data)
-preprocessed_transaction_data = preprocess_data(transaction_data)
-
-# Load BERT tokenizer and model
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-bert_model = BertModel.from_pretrained('bert-base-uncased')
-
-# Tokenize and encode text data
-text_data = ["Example sentence one.", "Another example sentence."]
-encoded_data = tokenizer(text_data, padding=True, truncation=True, return_tensors='pt')
-
-# Get BERT embeddings for the encoded data
-with torch.no_grad():
-    outputs = bert_model(input_ids=encoded_data['input_ids'], attention_mask=encoded_data['attention_mask'])
-    bert_embeddings = outputs.last_hidden_state  # Shape: (batch_size, sequence_length, hidden_size)
-
-# Example usage of dataset class
-stock_dataset = MyDataset(preprocessed_stock_data)
-customer_dataset = MyDataset(preprocessed_customer_data)
-transaction_dataset = MyDataset(preprocessed_transaction_data)
-
-# Example usage of DataLoader
-stock_loader = DataLoader(stock_dataset, batch_size=32, shuffle=True)
-customer_loader = DataLoader(customer_dataset, batch_size=32, shuffle=True)
-transaction_loader = DataLoader(transaction_dataset, batch_size=32, shuffle=True)
-
-# Define your model with consistent data types
-class FinancialAdviceModel(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
-        super(FinancialAdviceModel, self).__init__()
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(hidden_size, output_size)
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len=512):
+        super(PositionalEncoding, self).__init__()
+        self.encoding = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len).float().unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * -(torch.log(torch.tensor(10000.0)) / d_model))
+        self.encoding[:, 0::2] = torch.sin(position * div_term)
+        self.encoding[:, 1::2] = torch.cos(position * div_term)
+        self.encoding = self.encoding.unsqueeze(0)
 
     def forward(self, x):
-        out = self.fc1(x.float())  # Ensure input data type is consistent
-        out = self.relu(out)
-        out = self.fc2(out)
-        return out
+        return x + self.encoding[:, :x.size(1)].detach()
 
-# Example usage of the model
-model = FinancialAdviceModel(input_size=preprocessed_stock_data.shape[1], hidden_size=64, output_size=1)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-criterion = nn.MSELoss()
+class MultiHeadAttention(nn.Module):
+    def __init__(self, d_model, num_heads):
+        super(MultiHeadAttention, self).__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.head_dim = d_model // num_heads
+        self.query = nn.Linear(d_model, d_model)
+        self.key = nn.Linear(d_model, d_model)
+        self.value = nn.Linear(d_model, d_model)
+        self.fc_out = nn.Linear(d_model, d_model)
 
-# Training loop with consistent data types
-num_epochs = 10
-for epoch in range(num_epochs):
-    for batch in stock_loader:
-        optimizer.zero_grad()
-
-        # Check if the batch contains valid data
-        if torch.any(torch.isnan(batch)):
-            continue
-
-        outputs = model(batch)
-        loss = criterion(outputs, batch[:, -1].unsqueeze(1).float())  # Ensure target data type is consistent
-        loss.backward()
-        optimizer.step()
-    print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}')
-
-# Save the trained model
-torch.save(model.state_dict(), '/content/drive/My Drive/financial_advice_model.pth')
+    def forward(self, query, key, value, mask):
+        batch_size = query.shape[0]
+        Q = self.query(query)
+        K = self.key(key)
+        V = self.value(value)
+        Q = Q.view(batch_size, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        K = K.view(batch_size, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        V = V.view(batch_size, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        energy = torch.einsum('nqhd,nkhd->nhqk', [Q, K])
+        if mask is not None:
+            energy = energy.masked_fill(mask == 0, float('-1e20'))
+        attention = torch.nn.functional.softmax(energy / (self.d_model ** (1 / 2)), dim=3)
+        x = torch.einsum('nhql,nlhd->nqhd', [attention, V]).permute(0, 2, 1, 3).contiguous()
+        x = x.view(batch_size, -1, self.d_model)
+        x = self.fc_out(x)
+        return x
 
