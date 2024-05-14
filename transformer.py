@@ -113,3 +113,41 @@ class FinancialTransformer(nn.Module):
         self.transformer_blocks = nn.ModuleList([
             TransformerEncoderBlock(hidden_size, num_heads, ff_hidden_dim, dropout)
             for _ in range(num_layers)
+        ])
+        self.fc = nn.Linear(hidden_size, output_size)
+
+    def forward(self, x, mask=None):
+        x = self.embedding(x)
+        x = x + self.positional_encoding(x)
+        for transformer in self.transformer_blocks:
+            x = transformer(x, mask)
+        x = self.fc(x[-1, :, :])
+        return x
+
+model = FinancialTransformer(input_size=len(feature_columns), hidden_size=256, output_size=len(target_columns))
+
+# Define loss function and optimizer
+criterion = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+# Training loop
+epochs = 10
+
+for epoch in range(epochs):
+    outputs = model(X_train_tensor)
+
+    loss = criterion(outputs, y_train_tensor)
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+    print(f'Epoch [{epoch+1}/{epochs}], Loss: {loss.item()}')
+
+# Evaluation on the validation set
+with torch.no_grad():
+    val_outputs = model(X_val_tensor)
+    val_loss = criterion(val_outputs, y_val_tensor)
+    print(f'Validation Loss: {val_loss.item()}')
+
+# Save the model for deployment
+torch.save(model.state_dict(), 'financial_transformer_model.pth')
